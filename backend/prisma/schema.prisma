@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  LAPTOP
+  MONITOR
+  KEYBOARD
+  MOUSE
+  HEADPHONES
+  DOCK
+  GPU
+  SSD
+  PHONE
+  TABLET
+}
+
+enum Condition {
+  NEW
+  REFURBISHED_CERTIFIED
+}
+
+model Product {
+  id                String    @id @default(cuid())
+  slug              String    @unique
+  name              String
+  brand             String
+  category          Category
+  condition         Condition @default(NEW)
+  priceCents        Int
+  weightKg          Float
+  specs             Json
+  repairabilityScore Float    // 0..10
+  energyEfficiency  Float     // 0..10
+  carbonKg          Float     // lower is better
+  ecoScore          Int       // 0..100, derived
+  imageUrl          String?
+  description       String
+  benchmarks        Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([category])
+  @@index([brand])
+}
