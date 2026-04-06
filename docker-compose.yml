@@ -1,0 +1,41 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    image: ecoka-backend:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      PORT: "3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Bake the API base into the SPA. With nginx proxy '/api' → backend,
+        # leaving this empty makes the SPA call same-origin.
+        VITE_API_BASE: ""
+    image: ecoka-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
