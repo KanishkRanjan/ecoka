@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.6
-FROM node:20-alpine AS deps
+FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json ./
 RUN npm install --no-audit --no-fund --loglevel=error
 
-FROM node:20-alpine AS build
+FROM node:20-slim AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
@@ -13,8 +13,8 @@ COPY src ./src
 RUN npx prisma generate
 RUN npm run build
 
-FROM node:20-alpine AS runtime
-RUN apk add --no-cache curl openssl libc6-compat
+FROM node:20-slim AS runtime
+RUN apt-get update -y && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
