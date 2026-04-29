@@ -77,8 +77,10 @@ jobs:
 
       # --- Render Task Definitions ---
       # The render step replaces <IMAGE> in the JSON with the freshly-pushed
-      # image, and overrides the empty DATABASE_URL/REDIS_URL placeholders
-      # with the values from GitHub secrets.
+      # image. DATABASE_URL is pulled at runtime from AWS Secrets Manager
+      # via the `secrets` field in the task definition (set up by
+      # scripts/aws-setup.sh). REDIS_URL is intentionally absent — the
+      # backend cache module degrades gracefully when Redis is unreachable.
       - name: Render backend task definition
         id: task-def-backend
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -86,9 +88,6 @@ jobs:
           task-definition: ${{ env.ECS_TASK_DEFINITION_BACKEND }}
           container-name: ${{ env.CONTAINER_NAME_BACKEND }}
           image: ${{ steps.build-image-backend.outputs.image }}
-          environment-variables: |
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
-            REDIS_URL=${{ secrets.REDIS_URL }}
 
       - name: Render frontend task definition
         id: task-def-frontend

@@ -13,69 +13,42 @@ Settings → Secrets and variables → Actions → **New repository secret**:
 | `AWS_ACCESS_KEY_ID`      | from your AWS Learner Lab `~/.aws/credentials`     |
 | `AWS_SECRET_ACCESS_KEY`  | from `~/.aws/credentials`                          |
 | `AWS_SESSION_TOKEN`      | from `~/.aws/credentials` (refresh each lab session) |
-| `DATABASE_URL`           | your Neon Postgres connection string               |
-| `REDIS_URL`              | e.g. `redis://<elasticache-endpoint>:6379` — or omit if not running Redis |
 
-And one **repository variable** (Settings → Variables → Actions):
+These are the **only** GitHub secrets required. `DATABASE_URL` is read
+from AWS Secrets Manager at task-runtime (see step 2). Redis is not
+deployed — the backend cache module degrades gracefully when Redis is
+unreachable, so no `REDIS_URL` is needed.
+
+Optional repository **variable** (Settings → Variables → Actions):
 
 | Variable name         | Value                                              |
 | --------------------- | -------------------------------------------------- |
-| `BACKEND_PUBLIC_URL`  | the backend's public URL (ALB DNS or service IP). Leave blank if frontend nginx is the only public entrypoint and routes `/api` to backend. |
+| `BACKEND_PUBLIC_URL`  | the backend's public URL (e.g. `http://<task-public-ip>:3000`). Leave blank if you front both services with an ALB. |
 
-## 2. AWS resources to create once
+## 2. One-time AWS bootstrap
 
-These are one-time clicks; the workflow doesn't create them.
-
-### ECR repositories
+Run the script:
 
 ```bash
-aws ecr create-repository --repository-name ecoka-backend  --region us-east-1
-aws ecr create-repository --repository-name ecoka-frontend --region us-east-1
+bash scripts/aws-setup.sh
 ```
 
-### CloudWatch log groups
+It is idempotent — safe to re-run — and does the following:
 
-The task definitions set `awslogs-create-group: true`, so the first
-deployment auto-creates `/ecs/ecoka-backend` and `/ecs/ecoka-frontend`.
+1. Stores your `DATABASE_URL` (read from `.env`) in AWS Secrets Manager
+   as `ecoka/database-url`. The backend task definition references it
+   by ARN.
+2. Creates ECR repos `ecoka-backend` and `ecoka-frontend`.
+3. Creates the ECS cluster `ecoka-cluster`.
+4. Discovers your default VPC's public subnets and creates a security
+   group `ecoka-fargate-sg` allowing inbound 80 and 3000.
+5. Registers the initial task definitions (with a placeholder image so
+   ECS accepts them — the workflow replaces the image on every deploy).
+6. Creates the ECS services `ecoka-backend-service` and
+   `ecoka-frontend-service`, each with `assignPublicIp=ENABLED`.
 
-### ECS cluster (Fargate)
-
-```bash
-aws ecs create-cluster --cluster-name ecoka-cluster --region us-east-1
-```
-
-### ECS services
-
-Both services need a VPC, public subnets, and a security group that
-allows inbound on the container port. In Learner Lab, use the default
-VPC and create one SG that allows 0.0.0.0/0 on TCP 80 + 3000.
-
-You'll have to register the **initial** task definition once before the
-first GitHub-driven deploy (the workflow can update services but cannot
-create them):
-
-```bash
-aws ecs register-task-definition --cli-input-json file://.aws/task-definition-backend.json
-aws ecs register-task-definition --cli-input-json file://.aws/task-definition-frontend.json
-
-aws ecs create-service \
-  --cluster ecoka-cluster \
-  --service-name ecoka-backend-service \
-  --task-definition ecoka-backend \
-  --launch-type FARGATE \
-  --desired-count 1 \
-  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxx],securityGroups=[sg-xxxx],assignPublicIp=ENABLED}"
-
-aws ecs create-service \
-  --cluster ecoka-cluster \
-  --service-name ecoka-frontend-service \
-  --task-definition ecoka-frontend \
-  --launch-type FARGATE \
-  --desired-count 1 \
-  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxx],securityGroups=[sg-xxxx],assignPublicIp=ENABLED}"
-```
-
-(Replace `subnet-xxxx` and `sg-xxxx` with values from your VPC.)
+CloudWatch log groups `/ecs/ecoka-backend` and `/ecs/ecoka-frontend`
+are auto-created on first task run via `awslogs-create-group: true`.
 
 ## 3. Networking choices
 
