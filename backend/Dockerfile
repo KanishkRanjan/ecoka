@@ -14,7 +14,7 @@ RUN npx prisma generate
 RUN npm run build
 
 FROM node:20-alpine AS runtime
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl openssl libc6-compat
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
