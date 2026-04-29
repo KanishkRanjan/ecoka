@@ -9,3 +9,4 @@ coverage/
 .vite/
 backend/prisma/migrations/dev*
 *.tsbuildinfo
+.aws/
